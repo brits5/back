@@ -9,3 +9,4 @@
 [2025-01-30T23:51:18.209Z] CONSTRAINT_ANOMALIES: Check completed. Found 0 anomalies
 [2025-01-30T23:51:24.047Z] REFERENTIAL_INTEGRITY: Check completed. Found 0 potential issues
 [2025-01-30T23:52:22.018Z] REFERENTIAL_INTEGRITY: Check completed. Found 0 potential issues
+[2025-01-30T23:55:50.091Z] REFERENTIAL_INTEGRITY: Check completed. Found 20 potential issues

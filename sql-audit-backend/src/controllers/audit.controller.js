@@ -6,50 +6,60 @@ const checkReferentialIntegrity = async (req, res) => {
     try {
         const pool = await sql.connect(config);
         
-        const tablesResult = await pool.request().query(`
-            SELECT TABLE_NAME 
-            FROM INFORMATION_SCHEMA.TABLES 
-            WHERE TABLE_TYPE = 'BASE TABLE'
-        `);
+        // Consulta mejorada que detecta más casos de posibles FK
+        const query = `
+        WITH PotentialFKColumns AS (
+            SELECT 
+                t.TABLE_NAME,
+                c.COLUMN_NAME,
+                c.DATA_TYPE
+            FROM INFORMATION_SCHEMA.TABLES t
+            JOIN INFORMATION_SCHEMA.COLUMNS c 
+                ON t.TABLE_NAME = c.TABLE_NAME
+            WHERE t.TABLE_TYPE = 'BASE TABLE'
+                AND (
+                    c.COLUMN_NAME LIKE '%_id' 
+                    OR c.COLUMN_NAME LIKE '%Id'
+                    OR c.COLUMN_NAME = 'rowguid'
+                    OR c.COLUMN_NAME LIKE '%ModelID'
+                    OR c.COLUMN_NAME LIKE '%CategoryID'
+                    OR c.COLUMN_NAME LIKE '%DescriptionID'
+                )
+        ),
+        ExistingFKs AS (
+            SELECT 
+                OBJECT_NAME(fk.parent_object_id) AS TABLE_NAME,
+                COL_NAME(fkc.parent_object_id, fkc.parent_column_id) AS COLUMN_NAME
+            FROM sys.foreign_keys fk
+            JOIN sys.foreign_key_columns fkc 
+                ON fk.object_id = fkc.constraint_object_id
+        )
+        SELECT 
+            p.TABLE_NAME,
+            p.COLUMN_NAME,
+            p.DATA_TYPE
+        FROM PotentialFKColumns p
+        LEFT JOIN ExistingFKs e 
+            ON p.TABLE_NAME = e.TABLE_NAME 
+            AND p.COLUMN_NAME = e.COLUMN_NAME
+        WHERE e.TABLE_NAME IS NULL
+        ORDER BY p.TABLE_NAME, p.COLUMN_NAME;`;
+
+        const result = await pool.request().query(query);
         
-        const missingConstraints = [];
-        
-        for (const table of tablesResult.recordset) {
-            const columnsResult = await pool.request()
-                .input('tableName', sql.VarChar, table.TABLE_NAME)
-                .query(`
-                    SELECT COLUMN_NAME, DATA_TYPE 
-                    FROM INFORMATION_SCHEMA.COLUMNS 
-                    WHERE TABLE_NAME = @tableName
-                `);
-                
-            for (const column of columnsResult.recordset) {
-                if (column.COLUMN_NAME.endsWith('_id') || column.COLUMN_NAME.endsWith('Id')) {
-                    const fkCheck = await pool.request()
-                        .input('tableName', sql.VarChar, table.TABLE_NAME)
-                        .input('columnName', sql.VarChar, column.COLUMN_NAME)
-                        .query(`
-                            SELECT * 
-                            FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
-                            JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu 
-                                ON rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
-                            WHERE kcu.TABLE_NAME = @tableName 
-                                AND kcu.COLUMN_NAME = @columnName
-                        `);
-                        
-                    if (fkCheck.recordset.length === 0) {
-                        missingConstraints.push({
-                            table: table.TABLE_NAME,
-                            column: column.COLUMN_NAME,
-                            suggestion: 'Posible clave foránea sin restricción'
-                        });
-                    }
-                }
-            }
-        }
-        
+        const missingConstraints = result.recordset.map(row => ({
+            table: row.TABLE_NAME,
+            column: row.COLUMN_NAME,
+            dataType: row.DATA_TYPE,
+            suggestion: 'Posible clave foránea sin restricción'
+        }));
+
         logAudit('REFERENTIAL_INTEGRITY', `Check completed. Found ${missingConstraints.length} potential issues`);
-        res.json({ success: true, missingConstraints });
+        res.json({ 
+            success: true, 
+            missingConstraints,
+            totalIssues: missingConstraints.length
+        });
         
     } catch (err) {
         logAudit('ERROR', err.message);
