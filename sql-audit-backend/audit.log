@@ -1,0 +1,11 @@
+[2025-01-30T23:46:00.253Z] ERROR: Incorrect syntax near the keyword 'Database'.
+[2025-01-30T23:46:44.624Z] ERROR: Incorrect syntax near the keyword 'Database'.
+[2025-01-30T23:47:16.970Z] CONSTRAINT_ANOMALIES: Check completed. Found 0 anomalies
+[2025-01-30T23:47:35.958Z] REFERENTIAL_INTEGRITY: Check completed. Found 0 potential issues
+[2025-01-30T23:47:49.942Z] ERROR: Incorrect syntax near the keyword 'Database'.
+[2025-01-30T23:49:01.145Z] DATA_ANOMALIES: Check completed. Found 0 anomalies
+[2025-01-30T23:50:56.183Z] DATA_ANOMALIES: Check completed. Found 0 anomalies
+[2025-01-30T23:51:10.408Z] DATA_ANOMALIES: Check completed. Found 0 anomalies
+[2025-01-30T23:51:18.209Z] CONSTRAINT_ANOMALIES: Check completed. Found 0 anomalies
+[2025-01-30T23:51:24.047Z] REFERENTIAL_INTEGRITY: Check completed. Found 0 potential issues
+[2025-01-30T23:52:22.018Z] REFERENTIAL_INTEGRITY: Check completed. Found 0 potential issues

@@ -1,8 +1,8 @@
 const config = {
-    user: '',
-    password: '',
-    server: '',
-    database: '',
+    user: 'sa',
+    password: 'Admin123',
+    server: 'localhost',
+    database: 'AdventureWorksLT2016',
     options: {
         encrypt: true,
         trustServerCertificate: true

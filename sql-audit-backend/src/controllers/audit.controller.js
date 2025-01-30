@@ -109,14 +109,16 @@ const checkDataAnomalies = async (req, res) => {
         const pool = await sql.connect(config);
         const anomalies = [];
         
-        const tables = await pool.request().query(`
+        // Obtener todas las tablas
+        const tablesResult = await pool.request().query(`
             SELECT TABLE_NAME 
             FROM INFORMATION_SCHEMA.TABLES 
-            WHERE TABLE_TYPE = 'BASE TABLE'
+            WHERE TABLE_TYPE = 'BASE TABLE' 
+            AND TABLE_SCHEMA = 'dbo'
         `);
         
-        for (const table of tables.recordset) {
-            // Verificar valores nulos
+        for (const table of tablesResult.recordset) {
+            // Verificar valores nulos en columnas no-nullable
             const nullCheck = await pool.request()
                 .input('tableName', sql.VarChar, table.TABLE_NAME)
                 .query(`
@@ -124,6 +126,7 @@ const checkDataAnomalies = async (req, res) => {
                     FROM INFORMATION_SCHEMA.COLUMNS
                     WHERE TABLE_NAME = @tableName
                     AND IS_NULLABLE = 'NO'
+                    AND TABLE_SCHEMA = 'dbo'
                 `);
                 
             for (const column of nullCheck.recordset) {
@@ -132,8 +135,8 @@ const checkDataAnomalies = async (req, res) => {
                     .input('columnName', sql.VarChar, column.COLUMN_NAME)
                     .query(`
                         SELECT COUNT(*) as nullCount
-                        FROM ${table.TABLE_NAME}
-                        WHERE ${column.COLUMN_NAME} IS NULL
+                        FROM [${table.TABLE_NAME}]
+                        WHERE [${column.COLUMN_NAME}] IS NULL
                     `);
                     
                 if (nullCount.recordset[0].nullCount > 0) {
@@ -146,14 +149,19 @@ const checkDataAnomalies = async (req, res) => {
                 }
             }
             
-            // Verificar duplicados
+            // Verificar duplicados en columnas únicas
             const uniqueCheck = await pool.request()
                 .input('tableName', sql.VarChar, table.TABLE_NAME)
                 .query(`
-                    SELECT COLUMN_NAME
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE TABLE_NAME = @tableName
-                    AND COLUMNPROPERTY(OBJECT_ID(@tableName), COLUMN_NAME, 'IsIdentity') = 1
+                    SELECT c.COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.COLUMNS c
+                    INNER JOIN sys.indexes i 
+                        ON OBJECT_ID(c.TABLE_SCHEMA + '.' + c.TABLE_NAME) = i.object_id
+                    INNER JOIN sys.index_columns ic 
+                        ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+                    WHERE c.TABLE_NAME = @tableName
+                    AND i.is_unique = 1
+                    AND c.TABLE_SCHEMA = 'dbo'
                 `);
                 
             for (const column of uniqueCheck.recordset) {
@@ -161,9 +169,9 @@ const checkDataAnomalies = async (req, res) => {
                     .input('tableName', sql.VarChar, table.TABLE_NAME)
                     .input('columnName', sql.VarChar, column.COLUMN_NAME)
                     .query(`
-                        SELECT ${column.COLUMN_NAME}, COUNT(*) as count
-                        FROM ${table.TABLE_NAME}
-                        GROUP BY ${column.COLUMN_NAME}
+                        SELECT [${column.COLUMN_NAME}], COUNT(*) as count
+                        FROM [${table.TABLE_NAME}]
+                        GROUP BY [${column.COLUMN_NAME}]
                         HAVING COUNT(*) > 1
                     `);
                     
