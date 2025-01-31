@@ -1,12 +1,23 @@
-const config = {
-    user: 'sa',
-    password: 'Admin123',
-    server: 'localhost',
-    database: 'AdventureWorksLT2016',
+let currentConfig = {
+    user: '',
+    password: '',
+    server: '',
+    database: '',
     options: {
         encrypt: true,
         trustServerCertificate: true
     }
 };
 
-module.exports = config;
+const setConfig = (newConfig) => {
+    currentConfig = {
+        ...currentConfig,
+        ...newConfig
+    };
+};
+
+const getConfig = () => {
+    return currentConfig;
+};
+
+module.exports = { getConfig, setConfig };

@@ -1,12 +1,14 @@
+
+const { getConfig, setConfig } = require('../config/database');
+
 const sql = require('mssql');
 const config = require('../config/database');
 const { logAudit } = require('../utils/logger');
 
 const checkReferentialIntegrity = async (req, res) => {
     try {
-        const pool = await sql.connect(config);
+        const pool = await sql.connect(getConfig());
         
-        // Consulta mejorada que detecta más casos de posibles FK
         const query = `
         WITH PotentialFKColumns AS (
             SELECT 
@@ -54,7 +56,11 @@ const checkReferentialIntegrity = async (req, res) => {
             suggestion: 'Posible clave foránea sin restricción'
         }));
 
-        logAudit('REFERENTIAL_INTEGRITY', `Check completed. Found ${missingConstraints.length} potential issues`);
+        logAudit('REFERENTIAL_INTEGRITY', 
+            `Se encontraron ${missingConstraints.length} problemas de integridad referencial`, 
+            missingConstraints
+        );
+
         res.json({ 
             success: true, 
             missingConstraints,
@@ -62,14 +68,14 @@ const checkReferentialIntegrity = async (req, res) => {
         });
         
     } catch (err) {
-        logAudit('ERROR', err.message);
+        logAudit('ERROR', 'Error en verificación de integridad referencial', [{ error: err.message }]);
         res.status(500).json({ success: false, error: err.message });
     }
 };
 
 const checkConstraintAnomalies = async (req, res) => {
     try {
-        const pool = await sql.connect(config);
+        const pool = await sql.connect(getConfig());
         const anomalies = [];
         
         const constraints = await pool.request().query(`
@@ -105,21 +111,24 @@ const checkConstraintAnomalies = async (req, res) => {
             }
         }
         
-        logAudit('CONSTRAINT_ANOMALIES', `Check completed. Found ${anomalies.length} anomalies`);
+        logAudit('CONSTRAINT_ANOMALIES', 
+            `Se encontraron ${anomalies.length} anomalías en las restricciones`, 
+            anomalies
+        );
+        
         res.json({ success: true, anomalies });
         
     } catch (err) {
-        logAudit('ERROR', err.message);
+        logAudit('ERROR', 'Error en verificación de anomalías de restricciones', [{ error: err.message }]);
         res.status(500).json({ success: false, error: err.message });
     }
 };
 
 const checkDataAnomalies = async (req, res) => {
     try {
-        const pool = await sql.connect(config);
+        const pool = await sql.connect(getConfig());
         const anomalies = [];
         
-        // Obtener todas las tablas
         const tablesResult = await pool.request().query(`
             SELECT TABLE_NAME 
             FROM INFORMATION_SCHEMA.TABLES 
@@ -196,20 +205,15 @@ const checkDataAnomalies = async (req, res) => {
             }
         }
         
-        logAudit('DATA_ANOMALIES', `Check completed. Found ${anomalies.length} anomalies`);
+        logAudit('DATA_ANOMALIES', 
+            `Se encontraron ${anomalies.length} anomalías en los datos`, 
+            anomalies
+        );
+        
         res.json({ success: true, anomalies });
         
     } catch (err) {
-        logAudit('ERROR', err.message);
-        res.status(500).json({ success: false, error: err.message });
-    }
-};
-
-const getLogs = (req, res) => {
-    try {
-        const logs = fs.readFileSync(path.join(__dirname, '../../audit.log'), 'utf8');
-        res.json({ success: true, logs: logs.split('\n') });
-    } catch (err) {
+        logAudit('ERROR', 'Error en verificación de anomalías de datos', [{ error: err.message }]);
         res.status(500).json({ success: false, error: err.message });
     }
 };
@@ -218,18 +222,33 @@ const testConnection = async (req, res) => {
     const { server, database, user, password } = req.body;
     
     const testConfig = {
-        ...config,
         server,
         database,
         user,
-        password
+        password,
+        options: {
+            encrypt: true,
+            trustServerCertificate: true
+        }
     };
     
     try {
         const pool = await sql.connect(testConfig);
         await pool.close();
+        
+        // Guardar la configuración para uso futuro
+        setConfig(testConfig);
+        
+        logAudit('CONNECTION', 'Conexión exitosa a la base de datos', [
+            { 
+                server: server,
+                database: database,
+                user: user
+            }
+        ]);
         res.json({ success: true, message: 'Conexión exitosa' });
     } catch (err) {
+        logAudit('ERROR', 'Error de conexión a la base de datos', [{ error: err.message }]);
         res.status(500).json({ success: false, error: err.message });
     }
 };
@@ -238,6 +257,6 @@ module.exports = {
     checkReferentialIntegrity,
     checkConstraintAnomalies,
     checkDataAnomalies,
-    getLogs,
+    getLogs: require('../utils/logger').getLogs,
     testConnection
 };
